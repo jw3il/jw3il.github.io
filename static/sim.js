@@ -55,10 +55,13 @@ function setDragPos() {
  * A node in the graph.
  */
 class GraphNode {
+    static keyCounter = 0;
     static radius = 10;
     static color = d3.scaleOrdinal(d3.schemeCategory10);
 
     constructor(x, y) {
+        this.key = GraphNode.keyCounter;
+        GraphNode.keyCounter++;
         this.x = x;
         this.y = y;
         this.value = 0;
@@ -109,6 +112,8 @@ class GraphNode {
  * A link in a graph, connecting nodes.
  */
 class GraphLink {
+    static keyCounter = 0;
+
     /**
      * Create a link between two nodes.
      *
@@ -116,6 +121,8 @@ class GraphLink {
      * @param {GraphNode} b Node b
      */
     constructor(a, b) {
+        this.key = GraphLink.keyCounter;
+        GraphLink.keyCounter++;
         this.a = a;
         this.b = b;
         this.a.links.push(this);
@@ -174,6 +181,7 @@ class GraphLink {
  * Packet that moves though the network.
  */
 class Packet {
+    static keyCounter = 0;
     static ease = d3.easeCubic;
     static width = 10;
     static height = 10;
@@ -181,14 +189,16 @@ class Packet {
     static leaveAnimationTime = 250;
 
     constructor(initialNode, targetNode = null, payload = null) {
+        this.key = Packet.keyCounter;
+        Packet.keyCounter++;
         this.index = 0;
         this.link = null;
         this.t = 0;
         this.t0 = 0;
-    
+
         // whether the packet is idling on a node
         this.idle = true;
-        
+
         this.node = initialNode;
         this.x = this.node.x;
         this.y = this.node.y;
@@ -280,9 +290,6 @@ class Packet {
         return selection //.remove();
             .transition()
             .duration(Packet.leaveAnimationTime)
-            // keep updating the position during exit
-            .attrTween("cx", (p) => {p.node.x})
-            .attrTween("cy", (p) => {p.node.y})
             .attr('r', 0)
             // make transparent
             //.style('fill', '#0000')
@@ -314,12 +321,12 @@ class Packet {
             this.t0 / Packet.enterAnimationTime,
             1
         );
-        
+
         // only increase sim time after the packet has fully entered
         if (this.t0 >= Packet.enterAnimationTime) {
             this.t += elapsed;
         }
-        
+
         // interpolate position between node and nextNode
         var diffX = this.nextNode.x - this.node.x;
         var diffY = this.nextNode.y - this.node.y;
@@ -425,13 +432,13 @@ function updateNodesAndLinks() {
     simulation.force('link').links(links);
     simulation.alpha(0.5).restart();
 
-    svg_node = svg_node.data(nodes).join(
+    svg_node = svg_node.data(nodes, n => n.key).join(
         (enter) => GraphNode.enter(enter),
         (update) => update,
         (exit) => exit
     );
 
-    svg_link = svg_link.data(links).join(
+    svg_link = svg_link.data(links, (l) => l.key).join(
         (enter) => GraphLink.enter(enter),
         (update) => update,
         (exit) => exit
@@ -439,7 +446,7 @@ function updateNodesAndLinks() {
 }
 
 function updatePackets() {
-    svg_msg = svg_msg.data(packets).join(
+    svg_msg = svg_msg.data(packets, (p) => p.key).join(
         (enter) => Packet.enter(enter),
         (update) => update,
         (exit) => Packet.exit(exit) // exit.remove() (?)
@@ -520,15 +527,14 @@ function floydAdvanceIndex() {
 }
 
 function floydIteration() {
-    // console.log(floyd_j + ", " + floyd_i + ", " + floyd_k);
     // going over node k is better than the previously calculated distance
     if (dist[floyd_i][floyd_j] > dist[floyd_i][floyd_k] + dist[floyd_k][floyd_j]) {
         // go over node k
         dist[floyd_i][floyd_j] = dist[floyd_i][floyd_k] + dist[floyd_k][floyd_j];
         distPrev[floyd_i][floyd_j] = distPrev[floyd_k][floyd_j];
-        console.log("Updated floyd value " + floyd_i + "," + floyd_j + " to " + dist[floyd_i][floyd_j] + " and " + distPrev[floyd_i][floyd_j])
-        console.log("Distance Floyd", dist);
-        console.log("Prev Floyd", distPrev);
+        // console.log("Updated floyd value " + floyd_i + "," + floyd_j + " to " + dist[floyd_i][floyd_j] + " and " + distPrev[floyd_i][floyd_j])
+        // console.log("Distance Floyd", dist);
+        // console.log("Prev Floyd", distPrev);
     }
     floydAdvanceIndex();
 }
@@ -537,7 +543,7 @@ function getPath(idx_a, idx_b) {
     if (distPrev[idx_a][idx_b] == null) {
         return [];
     }
-    
+
     var path = [idx_b];
     while (idx_b != idx_a) {
         idx_b = distPrev[idx_a][idx_b];
@@ -616,11 +622,11 @@ function spawnNode(x, y) {
         adjacency[i_b][i_a] = 1;
         dist[i_a][i_b] = 1;
         dist[i_b][i_a] = 1;
-        console.log("Setting adjacency " + i_a + "," + i_b);
+        // console.log("Setting adjacency " + i_a + "," + i_b);
         distPrev[i_a][i_b] = i_a;
         distPrev[i_b][i_a] = i_b;
     });
-    console.log("Adjacency", adjacency);
+    // console.log("Adjacency", adjacency);
 
     // update simulation
     updateNodesAndLinks();
@@ -706,7 +712,7 @@ function step(time) {
         //dist[l.b.index][l.a.index] = length;
     });
 
-    if (nodes.length >= 1 && packets.length < 1) {
+    if (nodes.length >= 1 && packets.length < 2) {
         const initialNode = randNode();
         const targetNode = randNode();
         packets.push(new Packet(initialNode, targetNode));
