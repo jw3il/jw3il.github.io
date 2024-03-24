@@ -1,0 +1,1 @@
+Based on https://www.brycewray.com/posts/2022/07/really-getting-started-hugo-four-steps/
