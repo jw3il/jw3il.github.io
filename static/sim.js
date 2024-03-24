@@ -5,9 +5,42 @@ var nodes = [];
 var links = [];
 var packets = [];
 
-var adjacency = [];
-var dist = [];
-var distPrev = [];
+class Matrix {
+    values = [];
+
+    length() {
+        return this.values.length;
+    }
+
+    fill(val) {
+        this.values.forEach(a => a.fill(val));
+    }
+
+    get(idx_a, idx_b) {
+        return this.values[idx_a][idx_b];
+    }
+
+    set(idx_a, idx_b, val) {
+        this.values[idx_a][idx_b] = val;
+    }
+
+    setLast(val) {
+        this.set(this.values.length - 1, this.values.length - 1, val);
+    }
+
+    addDim(defaultValue) {
+        this.values.forEach(e => e.push(defaultValue));
+        let numElem = this.length() > 0 ? this.values[0].length : 1;
+        this.values.push(Array(numElem));
+        for (let i = 0; i < numElem; i++) {
+            this.values[this.values.length - 1][i] = defaultValue;
+        }
+    }
+}
+
+const adjacency = new Matrix();
+const dist = new Matrix();
+const distNext = new Matrix();
 
 const simulation = d3
     .forceSimulation(nodes)
@@ -206,28 +239,15 @@ class Packet {
         this.targetNode = targetNode == null ? initialNode : targetNode;
         this.idle = true;
         this.payload = payload;
-        console.log("Packet created at " + initialNode.index)
+        // console.log("Packet created at " + initialNode.index)
     }
 
     static enter(selection) {
         return (
             selection
-                /*.append('rect')
-                .attr('class', 'msg')
-                .attr('width', Packet.width)
-                .attr('height', Packet.height)
-                .attr('r', 1)
-                // make packets unclickable
-                // .attr('pointer-events', 'none')
-                .style('fill', '#0000')
-                .call((e) =>
-                    e
-                        .transition()
-                        .duration(Packet.enterAnimationTime)
-                        .style('fill', '#000a')
-                )*/
                 .append('circle')
                 .attr('class', 'msg')
+                .attr('pointer-events', 'none')
                 .attr('r', 0)
                 .call((e) =>
                     e.transition().duration(Packet.enterAnimationTime).attr('r', GraphNode.radius / 2)
@@ -235,7 +255,6 @@ class Packet {
                 .attr('stroke', '#fff')
                 .attr('stroke-width', 1.5)
                 .style('fill', "#000")
-                .attr('cx', (d) => d.x).attr('cy', (d) => d.y)
         )
     }
 
@@ -257,17 +276,12 @@ class Packet {
             // const randomLink = randRangeRound(0, this.node.links.length - 1);
             this.link = null;
             //console.log("Next node idx at " + this.node.index + ", " + this.targetNode.index + " -- " + nodes.length);
-            const shortestPath = getPath(this.node.index, this.targetNode.index);
-            if (shortestPath.length == 0) {
-                console.log('No shortest path from ' + this.node.index + " to " + this.targetNode.index);
+            const shortestPath = distNext.get(this.node.index, this.targetNode.index);
+            if (shortestPath == null) {
+                // console.log('No shortest path from ' + this.node.index + " to " + this.targetNode.index);
                 return;
             }
-            if (shortestPath.length == 1) {
-                this.node = this.targetNode;
-                this.leave();
-                return;
-            }
-            this.nextNode = nodes[shortestPath[1]];
+            this.nextNode = nodes[shortestPath];
             for (let i = 0; i < this.node.links.length; i++) {
                 // console.log('Link i=' + i + " of " + this.node.index + " is " + this.node.links[i].getOther(this.node).index);
                 if (this.node.links[i].getOther(this.node) == this.nextNode) {
@@ -276,10 +290,10 @@ class Packet {
                 }
             }
             if (this.link == null) {
-                console.log('Could not find path from ' + this.node.index + " to " + this.nextNode.index);
+                // console.log('Could not find path from ' + this.node.index + " to " + this.nextNode.index);
                 return;
             }
-            console.log('Next node is ' + this.nextNode.index);
+            // console.log('Next node is ' + this.nextNode.index);
             this.idle = false;
         } else {
             console.log('Deadlock! Node: ' + this.index);
@@ -287,22 +301,18 @@ class Packet {
     }
 
     static exit(selection) {
-        return selection //.remove();
+        return selection
             .transition()
             .duration(Packet.leaveAnimationTime)
             .attr('r', 0)
-            // make transparent
-            //.style('fill', '#0000')
-            // .delay(Packet.leaveAnimationTime)
             .remove();
     }
 
     leave() {
-        console.log("Packet finished at " + this.node.index)
+        // console.log("Packet finished at " + this.node.index)
         this.idle = true;
         packets.splice(packets.indexOf(this), 1);
         updatePackets();
-        console.log("Packets: " + packets.length);
     }
 
     /**
@@ -401,6 +411,10 @@ simulation.on('tick', function () {
 
     // update node positions
     svg_node.attr('cx', (d) => d.x).attr('cy', (d) => d.y);
+
+    // duplicate update of packet positions to force position sync with simulation
+    packets.forEach(p => p.update(0))
+    svg_msg.attr('cx', (m) => m.x).attr('cy', (m) => m.y);
 });
 
 // funs
@@ -510,7 +524,7 @@ var floyd_k = 0;
 var floyd_i = 0;
 var floyd_j = 0;
 function floydAdvanceIndex() {
-    let numNodes = dist.length;
+    let numNodes = dist.length();
     // TODO: reduce number of iterations, our graph is symmetric
     floyd_j += 1;
     if (floyd_j >= numNodes) {
@@ -528,39 +542,21 @@ function floydAdvanceIndex() {
 
 function floydIteration() {
     // going over node k is better than the previously calculated distance
-    if (dist[floyd_i][floyd_j] > dist[floyd_i][floyd_k] + dist[floyd_k][floyd_j]) {
+    const dij = dist.get(floyd_i, floyd_j);
+    const dijk = dist.get(floyd_i, floyd_k) + dist.get(floyd_k, floyd_j);
+    if (dij > dijk) {
         // go over node k
-        dist[floyd_i][floyd_j] = dist[floyd_i][floyd_k] + dist[floyd_k][floyd_j];
-        distPrev[floyd_i][floyd_j] = distPrev[floyd_k][floyd_j];
-        // console.log("Updated floyd value " + floyd_i + "," + floyd_j + " to " + dist[floyd_i][floyd_j] + " and " + distPrev[floyd_i][floyd_j])
-        // console.log("Distance Floyd", dist);
-        // console.log("Prev Floyd", distPrev);
+        dist.set(floyd_i, floyd_j, dijk);
+        distNext.set(floyd_i, floyd_j, distNext.get(floyd_i, floyd_k));
+        console.log("Updated floyd value " + floyd_i + "," + floyd_j + " to " + dist.get(floyd_i, floyd_j));
+        console.log("Distance Floyd", dist.values);
+        console.log("Next Floyd", distNext.values);
     }
     floydAdvanceIndex();
 }
 
-function getPath(idx_a, idx_b) {
-    if (distPrev[idx_a][idx_b] == null) {
-        return [];
-    }
-
-    var path = [idx_b];
-    while (idx_b != idx_a) {
-        idx_b = distPrev[idx_a][idx_b];
-        if (idx_b == null) {
-            return [];
-        }
-        path.push(idx_b);
-    }
-    return path.reverse();
-}
-
 function spawnNode(x, y) {
     var newNode = new GraphNode(x, y);
-
-    // increase size of adjacency matrix 
-    adjacency.forEach(e => e.push(0))
-    adjacency.push(Array(nodes.length + 1))
 
     // select neighbor nodes
     var neighbors = [];
@@ -585,48 +581,37 @@ function spawnNode(x, y) {
     nodes.push(newNode);
 
     // add links between new node and neighbors
+    let newLinks = [];
     neighbors.forEach((node) => {
-        links.push(new GraphLink(newNode, node));
+        let newLink = new GraphLink(newNode, node);
+        newLinks.push(newLink);
+        links.push(newLink);
     });
 
     // adjust distance matrix (with initial values)
-    dist.forEach((val, idx, arr) => val.push(Infinity))
-    dist.push(Array(nodes.length))
-    const dist_x = dist.length - 1;
-    //for (let x = 0; x < dist.length; x++) {
-    for (let y = 0; y < dist.length; y++) {
-        // distance to self is 0
-        dist[dist_x][y] = dist_x == y ? 0 : Infinity;
-    }
-    //}
+    dist.addDim(Infinity)
+    dist.setLast(0)
     console.log("Distance", dist);
 
     // next node of added node is self, other paths are unknown
-    distPrev.forEach(e => e.push(null));
-    distPrev.push(Array(nodes.length));
-    //for (let x = 0; x < distPrev.length; x++) {
-    for (let y = 0; y < distPrev.length; y++) {
-        // set previous node
-        distPrev[dist_x][y] = dist_x == y ? x : null;
-    }
-    //}
-    console.log("DistPrev", distPrev);
+    distNext.addDim(null);
+    distNext.setLast(distNext.length() - 1);
+    console.log("Next", distNext);
 
-    // reset and update adjacency and distance matrix
-    adjacency.forEach(a => a.fill(0));
-    links.forEach(l => {
-        // TODO: update distances in adjacency matrix at runtime based on actual distance
+    // increase size of adjacency matrix 
+    adjacency.addDim(0);
+    newLinks.forEach(l => {
         const i_a = l.a.index;
         const i_b = l.b.index;
-        adjacency[i_a][i_b] = 1;
-        adjacency[i_b][i_a] = 1;
-        dist[i_a][i_b] = 1;
-        dist[i_b][i_a] = 1;
-        // console.log("Setting adjacency " + i_a + "," + i_b);
-        distPrev[i_a][i_b] = i_a;
-        distPrev[i_b][i_a] = i_b;
+        adjacency.set(i_a, i_b, 1);
+        adjacency.set(i_b, i_a, 1);
+        // TODO: update distances at runtime based on actual distance
+        dist.set(i_a, i_b, 1);
+        dist.set(i_b, i_a, 1);
+        distNext.set(i_a, i_b, i_b);
+        distNext.set(i_b, i_a, i_a);
     });
-    // console.log("Adjacency", adjacency);
+    console.log("Adjacency", adjacency);
 
     // update simulation
     updateNodesAndLinks();
@@ -719,7 +704,9 @@ function step(time) {
         updatePackets();
     }
 
-    floydIteration();
+    for (let i = 0; i < 1; i++) {
+        floydIteration();
+    }
 
     // then update packets
     packets.forEach((p) => {
