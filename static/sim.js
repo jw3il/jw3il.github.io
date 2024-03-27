@@ -28,6 +28,22 @@ class Matrix {
         this.set(this.values.length - 1, this.values.length - 1, val);
     }
 
+    setDiagonal(val) {
+        if (this.length() <= 0) {
+            return;
+        }
+        let numElem = this.values.length;
+        if (Array.isArray(val)) {
+            for (let i = 0; i < numElem; i++) {
+                this.values[i][i] = val[i];
+            }
+        } else {
+            for (let i = 0; i < numElem; i++) {
+                this.values[i][i] = val;
+            }
+        }
+    }
+
     addDim(defaultValue) {
         this.values.forEach(e => e.push(defaultValue));
         let numElem = this.length() > 0 ? this.values[0].length : 1;
@@ -35,6 +51,11 @@ class Matrix {
         for (let i = 0; i < numElem; i++) {
             this.values[this.values.length - 1][i] = defaultValue;
         }
+    }
+
+    delDim(idx) {
+        this.values.splice(idx, 1)
+        this.values.forEach(e => e.splice(idx, 1));
     }
 }
 
@@ -128,6 +149,15 @@ class GraphNode {
             .call(setDragPos(simulation));
     }
 
+    static exit(selection) {
+        return selection
+            .transition()
+            .duration(Packet.leaveAnimationTime * 2)
+            .attr('stroke-width', 0)
+            .attr('r', 0)
+            .remove();
+    }
+
     static getColor(d) {
         if (d.hasOwnProperty('value')) {
             var nodeColorInterpolator = d3.interpolate(
@@ -171,9 +201,9 @@ class GraphLink {
         this.target = this.b.index;
     }
 
-    refreshAllIndices() {
+    static refreshAllIndices() {
         links.forEach(function (link) {
-            link.refreshLinkNodeIndices();
+            link.refreshIndices();
         });
     }
 
@@ -198,6 +228,15 @@ class GraphLink {
             .attr('class', 'link')
             .style('stroke', GraphLink.getColor)
             .style('stroke-width', 1);
+    }
+
+    static exit(selection) {
+        return selection
+            .transition()
+            .duration(Packet.leaveAnimationTime / 2)
+            .attr('stroke-width', 0)
+            .attr('opacity', 0)
+            .remove();
     }
 
     static getColor(d) {
@@ -305,6 +344,7 @@ class Packet {
             .transition()
             .duration(Packet.leaveAnimationTime)
             .attr('r', 0)
+            .each(p => deleteNode(p.node))
             .remove();
     }
 
@@ -440,22 +480,24 @@ function getTransformFit(selection) {
     return d3.zoomIdentity.translate(translate.x, translate.y).scale(scale);
 }
 
-function updateNodesAndLinks() {
+function updateNodesAndLinks(alpha = 0.5) {
+    floydReset();
+
     // update simulation
     simulation.nodes(nodes);
     simulation.force('link').links(links);
-    simulation.alpha(0.5).restart();
+    simulation.alpha(alpha).restart();
 
     svg_node = svg_node.data(nodes, n => n.key).join(
         (enter) => GraphNode.enter(enter),
         (update) => update,
-        (exit) => exit
+        (exit) => GraphNode.exit(exit)
     );
 
     svg_link = svg_link.data(links, (l) => l.key).join(
         (enter) => GraphLink.enter(enter),
         (update) => update,
-        (exit) => exit
+        (exit) => GraphLink.exit(exit)
     );
 }
 
@@ -522,7 +564,10 @@ function getClosestNodes(node, count) {
 
 var floyd_k = 0;
 var floyd_i = 0;
-var floyd_j = 0;
+var floyd_j = -1;
+var floydDone = false;
+var floydConnectivityTested = false;
+
 function floydAdvanceIndex() {
     let numNodes = dist.length();
     // TODO: reduce number of iterations, our graph is symmetric
@@ -537,10 +582,22 @@ function floydAdvanceIndex() {
     }
     if (floyd_k >= numNodes) {
         floyd_k = 0;
+        floydDone = true;
+        console.log("Floyd done", adjacency, dist, distNext);
     }
 }
 
+function floydReset() {
+    resetMatrices();
+    floydDone = false;
+    floyd_k = 0;
+    floyd_i = 0;
+    floyd_j = -1;
+    floydConnectivityTested = false;
+}
+
 function floydIteration() {
+    floydAdvanceIndex();
     // going over node k is better than the previously calculated distance
     const dij = dist.get(floyd_i, floyd_j);
     const dijk = dist.get(floyd_i, floyd_k) + dist.get(floyd_k, floyd_j);
@@ -548,14 +605,13 @@ function floydIteration() {
         // go over node k
         dist.set(floyd_i, floyd_j, dijk);
         distNext.set(floyd_i, floyd_j, distNext.get(floyd_i, floyd_k));
-        console.log("Updated floyd value " + floyd_i + "," + floyd_j + " to " + dist.get(floyd_i, floyd_j));
-        console.log("Distance Floyd", dist.values);
-        console.log("Next Floyd", distNext.values);
+        // console.log("Updated floyd value " + floyd_i + "," + floyd_j + " to " + dist.get(floyd_i, floyd_j));
+        // console.log("Distance Floyd", dist.values);
+        // console.log("Next Floyd", distNext.values);
     }
-    floydAdvanceIndex();
 }
 
-function spawnNode(x, y) {
+function spawnNode(x, y, alpha = 0.5) {
     var newNode = new GraphNode(x, y);
 
     // select neighbor nodes
@@ -614,7 +670,91 @@ function spawnNode(x, y) {
     console.log("Adjacency", adjacency);
 
     // update simulation
-    updateNodesAndLinks();
+    updateNodesAndLinks(alpha);
+}
+
+function deleteNode(node) {
+    if (nodes.length <= 1) {
+        // we should not delete the whole graph
+        return;
+    }
+    console.log("Links before", links, " len ", links.length);
+    console.log("Deleting node", nodes, " len ", nodes.length);
+
+    // update node list
+    let nodeIndex = nodes.indexOf(node);
+    nodes.splice(nodeIndex, 1);
+
+    GraphNode.refreshAllIndices();
+
+    // delete all links connected to the node
+    let newLinks = [];
+    console.log("Links before loop", links, " len ", links.length);
+    for (let i = node.links.length - 1; i >= 0; i--) {
+        // remove link in this node
+        console.log("Deleting link", i, " of ", node.links.length);
+        let link = node.links.splice(i, 1)[0];
+        let linkIndex = links.indexOf(link);
+        console.log("Deleting link", link, "index", linkIndex);
+        let otherNode = link.getOther(node);
+        // remove link in other node
+        otherNode.links.splice(otherNode.links.indexOf(link), 1)
+        // remove link in list of links (warning: expensive operation)
+        links.splice(links.indexOf(link), 1);
+
+        // make sure that the remaining nodes are still connected to other nodes
+        // i.e. there are no single-node islands (but there can still be multi-node
+        // islands)
+        if (otherNode.links.length == 0 && nodes.length > 1) {
+            console.log("Node has no links:", otherNode)
+            var newConnectedNode;
+            do {
+                newConnectedNode = randNode();
+            } while (newConnectedNode == otherNode);
+
+            let newLink = new GraphLink(otherNode, randNode());
+            newLinks.push(newLink);
+            links.push(newLink);
+        }
+        console.log("Links after iteration", i, "are", links, " len ", links.length);
+        if (node.links.length == 0) {
+            break;
+        }
+    }
+
+    adjacency.delDim(nodeIndex);
+    dist.delDim(nodeIndex);
+    distNext.delDim(nodeIndex);
+
+    GraphLink.refreshAllIndices();
+
+    // update svg
+    updateNodesAndLinks(0.1);
+    console.log("Links afterwards", links, " len ", links.length);
+    console.log("Nodes afterwards", nodes, " len ", nodes.length);
+}
+
+function resetMatrices() {
+    adjacency.fill(0);
+
+    // reset distance matrix
+    dist.fill(Infinity);
+    dist.setDiagonal(0);
+
+    // reset next node matrix
+    distNext.fill(null);
+    distNext.setDiagonal(Array.from(Array(distNext.length()).keys()));
+
+    links.forEach(l => {
+        const i_a = l.a.index;
+        const i_b = l.b.index;
+        adjacency.set(i_a, i_b, 1);
+        adjacency.set(i_b, i_a, 1);
+        dist.set(i_a, i_b, 1);
+        dist.set(i_b, i_a, 1);
+        distNext.set(i_a, i_b, i_b);
+        distNext.set(i_b, i_a, i_a);
+    });
 }
 
 // initialise the graph
@@ -671,6 +811,9 @@ function updateZoom(elapsed) {
 // TODO: sync with animation
 var lastTime = null;
 var elapsed = 0;
+var totalPackets = 0;
+var targetNodes = 15;
+var buildUpElapsed = 0;
 function step(time) {
     // calculate delta time
     if (lastTime != null) {
@@ -697,15 +840,69 @@ function step(time) {
         //dist[l.b.index][l.a.index] = length;
     });
 
-    if (nodes.length >= 1 && packets.length < 2) {
+    if (nodes.length > 1 && packets.length < 1) {
         const initialNode = randNode();
         const targetNode = randNode();
         packets.push(new Packet(initialNode, targetNode));
         updatePackets();
+        totalPackets++;
     }
 
-    for (let i = 0; i < 1; i++) {
-        floydIteration();
+    buildUpElapsed += elapsed;
+    if (nodes.length < targetNodes && buildUpElapsed >= 200) {
+        buildUpElapsed = 0;
+
+        let randomNode = randNode();
+        spawnNode(randomNode.x, randomNode.y, 0.3);
+
+        if (nodes.length >= targetNodes) {
+            targetNodes = randRange(2, 15);
+            console.log("New target nodes", targetNodes);
+        }
+    }
+
+    if (!floydDone) {
+        for (let i = 0; i < 100; i++) {
+            floydIteration();
+        }
+    } else if (!floydConnectivityTested) {
+        console.log("Testing connectivity");
+        floydConnectivityTested = true;
+        var changes = false;
+
+        // randomly connect a node that is not connected
+
+        // randomization from https://stackoverflow.com/a/46545530
+        let randomIndices = Array.from(Array(nodes.length).keys())
+            .map(value => ({ value, sort: Math.random() }))
+            .sort((a, b) => a.sort - b.sort)
+            .map(({ value }) => value)
+
+
+        console.log("Iterating over random indices ", randomIndices);
+        // for each node (in random order)
+        for (let i of randomIndices) {
+            for (let j of randomIndices) {
+                if (i != j && dist.values[i][j] == Infinity) {
+                    // no known connection => create link
+                    let newLink = new GraphLink(nodes[i], nodes[j]);
+                    links.push(newLink);
+                    changes = true;
+                    break;
+                }
+            }
+            if (changes) {
+                break;
+            }
+        }
+
+        if (changes) {
+            console.log("Found isolated nodes");
+            updateNodesAndLinks(0.05);
+            floydConnectivityTested = false;
+        } else {
+            console.log("Could not find isolated nodes");
+        }
     }
 
     // then update packets
