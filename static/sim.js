@@ -848,7 +848,7 @@ function step(time) {
         //dist[l.b.index][l.a.index] = length;
     });
 
-    if (initialZoom.done && nodes.length > 1 && packets.length < 1) {
+    if (initialZoom.done && ((nodes.length >= 10 && packets.length < 2) || (nodes.length > 1 && packets.length < 1))) {
         const initialNode = randNode();
         const targetNode = randNode();
         packets.push(new Packet(initialNode, targetNode));
@@ -863,7 +863,7 @@ function step(time) {
         var x, y;
         // TODO: Prioritize nodes in larger dimension
         // idea: multiply position by width, height and random factor in (0, 1). Then sort sums, choose first element
-        sortedNodes = nodes.map(n => ({ n, sort: Math.abs(n.x * width * Math.random()) + Math.abs(n.y * height * Math.random) })).sort((a, b) => a.sort - b.sort).map(({ n }) => n)
+        sortedNodes = nodes.map(n => ({ n, sort: Math.abs(n.x / height * Math.random()) + Math.abs(n.y / width * Math.random) })).sort((a, b) => a.sort - b.sort).map(({ n }) => n)
         /*if (Math.random() <= 0.1) {
             let zoom_origin_x = initialZoom.from.invertX(0);
             let zoom_width = initialZoom.from.invertX(width);
@@ -886,7 +886,7 @@ function step(time) {
     }
 
     if (!floydDone) {
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 50; i++) {
             floydIteration();
         }
     } else if (!floydConnectivityTested) {
