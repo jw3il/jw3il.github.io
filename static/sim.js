@@ -70,7 +70,7 @@ const simulation = d3
     .force('center', d3.forceCenter(0, 0));
 
 // color for links and nodes that are occupied
-const loadColor = '#0d7';
+const loadColor = '#fff'; // '#0d7';
 
 /**
  * Drag callbacks from https://observablehq.com/@d3/force-directed-graph to
@@ -143,7 +143,6 @@ class GraphNode {
             .call((e) =>
                 e.transition().duration(500).attr('r', GraphNode.radius)
             )
-            .attr('stroke', '#fff')
             .attr('stroke-width', 1.5)
             .style('fill', GraphNode.getColor)
             .call(setDragPos(simulation));
@@ -152,8 +151,10 @@ class GraphNode {
     static exit(selection) {
         return selection
             .transition()
-            .duration(Packet.leaveAnimationTime * 2)
             .attr('stroke-width', 0)
+            .style('fill', loadColor)
+            .transition()
+            .duration(60000)
             .attr('r', 0)
             .remove();
     }
@@ -161,6 +162,7 @@ class GraphNode {
     static getColor(d) {
         if (d.hasOwnProperty('value')) {
             var nodeColorInterpolator = d3.interpolate(
+                // loadColor,
                 GraphNode.color(d.index),
                 loadColor
             );
@@ -467,6 +469,7 @@ function getTransformFit(selection) {
         return d3.zoomIdentity.translate(bounds.x, bounds.y);
     }
 
+    // TODO: rotate for optimal fit
     var scale = Math.min(width / bounds.width, height / bounds.height);
     var center = {
         x: bounds.x + bounds.width / 2,
@@ -777,6 +780,7 @@ var warumUp = setInterval(function () {
     }
 }, 5);
 
+var currTransform;
 var initialZoom = {
     from: d3.zoomIdentity,
     duration: 1000,
@@ -796,7 +800,8 @@ function updateZoom(elapsed) {
             getTransformFit(svg_node_g)
         );
 
-        svg.call(zoom.transform, interTransform(initialZoom.ease(ratio)));
+        currTransform = interTransform(initialZoom.ease(ratio));
+        svg.call(zoom.transform, currTransform);
 
         if (ratio >= 1) {
             initialZoom.done = true;
@@ -804,6 +809,9 @@ function updateZoom(elapsed) {
             initialZoom.from = getTransformFit(svg_node_g);
         }
     }
+}
+function resetZoom() {
+    initialZoom.done = false;
 }
 
 // main loop
@@ -840,7 +848,7 @@ function step(time) {
         //dist[l.b.index][l.a.index] = length;
     });
 
-    if (nodes.length > 1 && packets.length < 1) {
+    if (initialZoom.done && nodes.length > 1 && packets.length < 1) {
         const initialNode = randNode();
         const targetNode = randNode();
         packets.push(new Packet(initialNode, targetNode));
@@ -852,8 +860,24 @@ function step(time) {
     if (nodes.length < targetNodes && buildUpElapsed >= 200) {
         buildUpElapsed = 0;
 
-        let randomNode = randNode();
-        spawnNode(randomNode.x, randomNode.y, 0.3);
+        var x, y;
+        // TODO: Prioritize nodes in larger dimension
+        // idea: multiply position by width, height and random factor in (0, 1). Then sort sums, choose first element
+        sortedNodes = nodes.map(n => ({ n, sort: Math.abs(n.x * width * Math.random()) + Math.abs(n.y * height * Math.random) })).sort((a, b) => a.sort - b.sort).map(({ n }) => n)
+        /*if (Math.random() <= 0.1) {
+            let zoom_origin_x = initialZoom.from.invertX(0);
+            let zoom_width = initialZoom.from.invertX(width);
+            let zoom_origin_y = initialZoom.from.invertY(0);
+            let zoom_height = initialZoom.from.invertY(height);
+            x = zoom_origin_x - zoom_width / 2 + randRange(0, zoom_width)
+            y = zoom_origin_y - zoom_height / 2 + randRange(0, zoom_height)
+        }
+        else {*/
+        let randomNode = sortedNodes[sortedNodes.length - 1]; // randNode();
+        x = randomNode.x;
+        y = randomNode.y;
+        // }
+        spawnNode(x, y, 0.3);
 
         if (nodes.length >= targetNodes) {
             targetNodes = randRange(2, 15);
