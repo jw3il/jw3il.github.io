@@ -673,16 +673,12 @@ function floydReset() {
 
 function floydIteration() {
     floydAdvanceIndex();
-    // going over node k is better than the previously calculated distance
     const dij = dist.get(floyd_i, floyd_j);
     const dijk = dist.get(floyd_i, floyd_k) + dist.get(floyd_k, floyd_j);
+    // check if going over node k is better than the previously calculated distance
     if (dij > dijk) {
-        // go over node k
         dist.set(floyd_i, floyd_j, dijk);
         distNext.set(floyd_i, floyd_j, distNext.get(floyd_i, floyd_k));
-        // console.log("Updated floyd value " + floyd_i + "," + floyd_j + " to " + dist.get(floyd_i, floyd_j));
-        // console.log("Distance Floyd", dist.values);
-        // console.log("Next Floyd", distNext.values);
     }
 }
 
@@ -840,14 +836,6 @@ var warumUp = setInterval(function () {
         spawnNode(getRandomCoord(width), getRandomCoord(height));
     } else {
         clearInterval(warumUp);
-
-        /*for (var i = 0; i < 40; i++) {
-            packets.push(
-                new Packet(nodes[randRangeRound(0, nodes.length - 1)])
-            );
-        }*/
-        updatePackets();
-
         warmUpDone = true;
     }
 }, 5);
@@ -867,6 +855,7 @@ function updateZoom(elapsed) {
             getTransformFit(svg_node_g)
         );
 
+        // slowly zoom to new fit
         currTransform = interTransform(d3.easeCubic(0.2));
         svg.call(zoom.transform, currTransform);
     } else {
@@ -883,7 +872,6 @@ function updateZoom(elapsed) {
         if (ratio >= 1) {
             initialZoom.done = true;
             initialZoom.elapsed = 0;
-            initialZoom.from = getTransformFit(svg_node_g);
         }
     }
 }
@@ -893,7 +881,6 @@ function resetZoom() {
 
 // main loop
 
-// TODO: sync with animation
 var lastTime = null;
 var elapsed = 0;
 var totalPackets = 0;
@@ -937,25 +924,16 @@ function step(time) {
     if (nodes.length < targetNodes && buildUpElapsed >= 200) {
         buildUpElapsed = 0;
 
-        var x, y;
-        // TODO: Prioritize nodes in larger dimension
-        // idea: multiply position by width, height and random factor in (0, 1). Then sort sums, choose first element
+        // idea: select random node based on its position, prefer nodes that are
+        // fruther away from the center, particulary across the bigger screen dimension
         const whr = width / height;
-        sortedNodes = nodes.map(n => ({ n, sort: (Math.abs(n.x) * whr + Math.abs(n.y)) * Math.random() })).sort((a, b) => a.sort - b.sort).map(({ n }) => n)
-        // if (Math.random() <= 0.9) {
-        //     let zoom_origin_x = initialZoom.from.invertX(0);
-        //     let zoom_width = initialZoom.from.invertX(width);
-        //     let zoom_origin_y = initialZoom.from.invertY(0);
-        //     let zoom_height = initialZoom.from.invertY(height);
-        //     x = zoom_origin_x - zoom_width / 2 + randRange(0, zoom_width)
-        //     y = zoom_origin_y - zoom_height / 2 + randRange(0, zoom_height)
-        // }
-        // else {
+        sortedNodes = nodes
+            .map(n => ({
+                n, sort: (Math.abs(n.x) * whr + Math.abs(n.y)) * Math.random()
+            }))
+            .sort((a, b) => a.sort - b.sort).map(({ n }) => n)
         let randomNode = sortedNodes[sortedNodes.length - 1]; // randNode();
-        x = randomNode.x;
-        y = randomNode.y;
-        //}
-        spawnNode(x, y, 0.3);
+        spawnNode(randomNode.x, randomNode.y, 0.3);
 
         if (nodes.length >= targetNodes) {
             targetNodes = randRange(3, 15);
@@ -980,7 +958,6 @@ function step(time) {
             .sort((a, b) => a.sort - b.sort)
             .map(({ value }) => value)
 
-
         // console.log("Iterating over random indices ", randomIndices);
         // for each node (in random order)
         for (let i of randomIndices) {
@@ -1000,7 +977,7 @@ function step(time) {
 
         if (changes) {
             console.log("Found isolated nodes");
-            updateNodesAndLinks(0.05);
+            updateNodesAndLinks(0.1);
             floydConnectivityTested = false;
         } else {
             console.log("Could not find isolated nodes");
