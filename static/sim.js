@@ -112,6 +112,7 @@ class GraphNode {
     static keyCounter = 0;
     static radius = 10;
     static color = d3.scaleOrdinal(d3.schemeCategory10);
+    static strokeWidth = 1.5;
 
     constructor(x, y) {
         this.key = GraphNode.keyCounter;
@@ -144,19 +145,61 @@ class GraphNode {
             .call((e) =>
                 e.transition().duration(500).attr('r', GraphNode.radius)
             )
-            .attr('stroke-width', 1.5)
+            .attr('stroke-width', GraphNode.strokeWidth)
             .style('fill', GraphNode.getColor)
             .call(setDragPos(simulation));
     }
 
     static exit(selection) {
         return selection
-            .style('fill', loadColor)
-            .attr('stroke-width', 0)
-            .each((n) => n.alive = false)
-            .transition()
-            .duration(60000)
-            .attr('r', 0)
+            .each((n) => {
+                n.alive = false;
+                // create huge "pulse" node
+                svg_background_g
+                    .append('circle')
+                    .attr('class', 'node.pulse')
+                    .attr('r', GraphNode.radius - GraphNode.strokeWidth / 2)
+                    .attr('stroke-width', 0)
+                    .style('fill', GraphNode.color(n.index))
+                    .attr('cx', n.x)
+                    .attr("cy", n.y)
+                    .attr('opacity', 1)
+                    .transition()
+                    .duration(1000)
+                    .attr('r', GraphNode.radius * 10)
+                    .attr('opacity', 0)
+                    .remove();
+
+                // create fading node of same size
+                svg_background_g
+                    .append('circle')
+                    .attr('class', 'node.fade')
+                    .attr('r', GraphNode.radius - GraphNode.strokeWidth / 2)
+                    .attr('stroke-width', 0)
+                    .style('fill', loadColor)
+                    .attr('cx', n.x)
+                    .attr("cy", n.y)
+                    .transition()
+                    .duration(1000 * 0.5)
+                    .attr('r', 0)
+                    .remove();
+                // create small "pop effect" nodes
+                /*for (let i = 0; i < 10; i++) {
+                    svg_background_g
+                        .append('circle')
+                        .attr('class', 'node.pop')
+                        .attr('r', Math.max(1, Math.random() * GraphNode.radius / 3))
+                        .attr('stroke-width', 0)
+                        // TODO: get similar colors, not the exact one
+                        .style('fill', GraphNode.color(n.index))
+                        .attr('cx', n.x - GraphNode.radius + Math.random() * GraphNode.radius * 2)
+                        .attr("cy", n.y - GraphNode.radius + Math.random() * GraphNode.radius * 2)
+                        .transition()
+                        .duration(100 + Math.random() * 900)
+                        .attr('r', 0)
+                        .remove();
+                }*/
+            })
             .remove();
     }
 
@@ -237,8 +280,6 @@ class GraphLink {
     static exit(selection) {
         return selection
             .each(l => l.alive = false)
-            .transition()
-            .duration(Packet.leaveAnimationTime / 2)
             .attr('stroke-width', 0)
             .attr('opacity', 0)
             .remove();
@@ -317,6 +358,11 @@ class Packet {
 
         if (this.node == this.targetNode) {
             this.arrived = true;
+            this.leave();
+            return;
+        }
+
+        if (!this.node.alive) {
             this.leave();
             return;
         }
@@ -443,6 +489,8 @@ function zoomed({ transform }) {
 }
 
 svg.call(zoom.transform, d3.zoomIdentity);
+
+var svg_background_g = g.append('g');
 
 var svg_link = GraphLink.enter(
     g.append('g').selectAll('line.link').data(links).enter()
@@ -851,7 +899,7 @@ var elapsed = 0;
 var totalPackets = 0;
 var targetNodes = 15;
 var buildUpElapsed = 0;
-const maxNumPackets = 1;
+const maxNumPackets = 2;
 function step(time) {
     // calculate delta time
     if (lastTime != null) {
@@ -874,9 +922,12 @@ function step(time) {
         l.value *= 0.9;
     });
 
-    if (initialZoom.done && ((nodes.length >= 10 && packets.length < maxNumPackets) || (nodes.length > 1 && packets.length < 1))) {
+    if (initialZoom.done && ((nodes.length >= 10 && packets.length < maxNumPackets) || (nodes.length > 2 && packets.length < 1))) {
         const initialNode = randNode();
-        const targetNode = randNode();
+        var targetNode;
+        do {
+            targetNode = randNode();
+        } while (targetNode == initialNode);
         packets.push(new Packet(initialNode, targetNode));
         updatePackets();
         totalPackets++;
@@ -907,7 +958,7 @@ function step(time) {
         spawnNode(x, y, 0.3);
 
         if (nodes.length >= targetNodes) {
-            targetNodes = randRange(2, 15);
+            targetNodes = randRange(3, 15);
             console.log("New target nodes", targetNodes);
         }
     }
