@@ -66,8 +66,8 @@ const distNext = new Matrix();
 const simulation = d3
     .forceSimulation(nodes)
     .force('link', d3.forceLink(links).distance(30))
-    .force('charge', d3.forceManyBody())
-    .force('center', d3.forceCenter(0, 0));
+    .force('charge', d3.forceManyBody().distanceMin(15).distanceMax(Math.sqrt(width * width + height * height)).strength(-100))
+    .force('center', d3.forceCenter(0, 0).strength(0.2));
 
 // color for links and nodes that are occupied
 const loadColor = '#fff'; // '#0d7';
@@ -121,6 +121,7 @@ class GraphNode {
         this.value = 0;
         this.index = nodes.length;
         this.links = []
+        this.alive = true;
     }
 
     getDistance(otherNode) {
@@ -150,9 +151,9 @@ class GraphNode {
 
     static exit(selection) {
         return selection
-            .transition()
-            .attr('stroke-width', 0)
             .style('fill', loadColor)
+            .attr('stroke-width', 0)
+            .each((n) => n.alive = false)
             .transition()
             .duration(60000)
             .attr('r', 0)
@@ -195,6 +196,7 @@ class GraphLink {
         // refresh attributes
         this.refreshIndices();
         this.value = 0;
+        this.alive = true;
     }
 
     refreshIndices() {
@@ -234,6 +236,7 @@ class GraphLink {
 
     static exit(selection) {
         return selection
+            .each(l => l.alive = false)
             .transition()
             .duration(Packet.leaveAnimationTime / 2)
             .attr('stroke-width', 0)
@@ -272,13 +275,13 @@ class Packet {
 
         // whether the packet is idling on a node
         this.idle = true;
+        this.arrived = false;
 
         this.node = initialNode;
         this.x = this.node.x;
         this.y = this.node.y;
         this.nextNode = initialNode;
         this.targetNode = targetNode == null ? initialNode : targetNode;
-        this.idle = true;
         this.payload = payload;
         // console.log("Packet created at " + initialNode.index)
     }
@@ -307,22 +310,27 @@ class Packet {
             return;
         }
 
-        if (this.targetNode != undefined && this.node == this.targetNode) {
+        if (!this.targetNode.alive) {
+            // select new target
+            this.targetNode = randNode();
+        }
+
+        if (this.node == this.targetNode) {
+            this.arrived = true;
             this.leave();
             return;
         }
 
         if (this.node.links.length > 0) {
-            // TODO: Get to the target node.. 
-            // const randomLink = randRangeRound(0, this.node.links.length - 1);
+            // Get to the target node.. 
             this.link = null;
             //console.log("Next node idx at " + this.node.index + ", " + this.targetNode.index + " -- " + nodes.length);
-            const shortestPath = distNext.get(this.node.index, this.targetNode.index);
-            if (shortestPath == null) {
+            const nextNodeIdx = distNext.get(this.node.index, this.targetNode.index);
+            if (nextNodeIdx == null) {
                 // console.log('No shortest path from ' + this.node.index + " to " + this.targetNode.index);
                 return;
             }
-            this.nextNode = nodes[shortestPath];
+            this.nextNode = nodes[nextNodeIdx];
             for (let i = 0; i < this.node.links.length; i++) {
                 // console.log('Link i=' + i + " of " + this.node.index + " is " + this.node.links[i].getOther(this.node).index);
                 if (this.node.links[i].getOther(this.node) == this.nextNode) {
@@ -346,7 +354,7 @@ class Packet {
             .transition()
             .duration(Packet.leaveAnimationTime)
             .attr('r', 0)
-            .each(p => deleteNode(p.node))
+            .each(p => { if (p.arrived) deleteNode(p.node) })
             .remove();
     }
 
@@ -365,6 +373,12 @@ class Packet {
         if (this.idle) {
             this.x = this.node.x; // - Packet.width / 2;
             this.y = this.node.y; // - Packet.height / 2;
+            return;
+        }
+
+        if (!this.link.alive) {
+            // packet leaves with destroyed link
+            this.leave();
             return;
         }
 
@@ -483,13 +497,18 @@ function getTransformFit(selection) {
     return d3.zoomIdentity.translate(translate.x, translate.y).scale(scale);
 }
 
+function getCurrentTransform() {
+    let nodeTransform = g.node().transform;
+    var translate = {
+        x: nodeTransform.baseVal[0].matrix.e,
+        y: nodeTransform.baseVal[0].matrix.f,
+    };
+    let scale = nodeTransform.baseVal[1].matrix.a;
+    return d3.zoomIdentity.translate(translate.x, translate.y).scale(scale);
+}
+
 function updateNodesAndLinks(alpha = 0.5) {
     floydReset();
-
-    // update simulation
-    simulation.nodes(nodes);
-    simulation.force('link').links(links);
-    simulation.alpha(alpha).restart();
 
     svg_node = svg_node.data(nodes, n => n.key).join(
         (enter) => GraphNode.enter(enter),
@@ -502,6 +521,11 @@ function updateNodesAndLinks(alpha = 0.5) {
         (update) => update,
         (exit) => GraphLink.exit(exit)
     );
+
+    // update simulation
+    simulation.nodes(nodes);
+    simulation.force('link').links(links);
+    simulation.alpha(alpha).restart();
 }
 
 function updatePackets() {
@@ -650,12 +674,12 @@ function spawnNode(x, y, alpha = 0.5) {
     // adjust distance matrix (with initial values)
     dist.addDim(Infinity)
     dist.setLast(0)
-    console.log("Distance", dist);
+    // console.log("Distance", dist);
 
     // next node of added node is self, other paths are unknown
     distNext.addDim(null);
     distNext.setLast(distNext.length() - 1);
-    console.log("Next", distNext);
+    // console.log("Next", distNext);
 
     // increase size of adjacency matrix 
     adjacency.addDim(0);
@@ -670,7 +694,7 @@ function spawnNode(x, y, alpha = 0.5) {
         distNext.set(i_a, i_b, i_b);
         distNext.set(i_b, i_a, i_a);
     });
-    console.log("Adjacency", adjacency);
+    // console.log("Adjacency", adjacency);
 
     // update simulation
     updateNodesAndLinks(alpha);
@@ -681,8 +705,8 @@ function deleteNode(node) {
         // we should not delete the whole graph
         return;
     }
-    console.log("Links before", links, " len ", links.length);
-    console.log("Deleting node", nodes, " len ", nodes.length);
+    // console.log("Links before", links, " len ", links.length);
+    // console.log("Deleting node", nodes, " len ", nodes.length);
 
     // update node list
     let nodeIndex = nodes.indexOf(node);
@@ -692,13 +716,13 @@ function deleteNode(node) {
 
     // delete all links connected to the node
     let newLinks = [];
-    console.log("Links before loop", links, " len ", links.length);
+    // console.log("Links before loop", links, " len ", links.length);
     for (let i = node.links.length - 1; i >= 0; i--) {
         // remove link in this node
-        console.log("Deleting link", i, " of ", node.links.length);
+        // console.log("Deleting link", i, " of ", node.links.length);
         let link = node.links.splice(i, 1)[0];
         let linkIndex = links.indexOf(link);
-        console.log("Deleting link", link, "index", linkIndex);
+        // console.log("Deleting link", link, "index", linkIndex);
         let otherNode = link.getOther(node);
         // remove link in other node
         otherNode.links.splice(otherNode.links.indexOf(link), 1)
@@ -709,7 +733,7 @@ function deleteNode(node) {
         // i.e. there are no single-node islands (but there can still be multi-node
         // islands)
         if (otherNode.links.length == 0 && nodes.length > 1) {
-            console.log("Node has no links:", otherNode)
+            // console.log("Node has no links:", otherNode)
             var newConnectedNode;
             do {
                 newConnectedNode = randNode();
@@ -719,7 +743,7 @@ function deleteNode(node) {
             newLinks.push(newLink);
             links.push(newLink);
         }
-        console.log("Links after iteration", i, "are", links, " len ", links.length);
+        // console.log("Links after iteration", i, "are", links, " len ", links.length);
         if (node.links.length == 0) {
             break;
         }
@@ -733,8 +757,8 @@ function deleteNode(node) {
 
     // update svg
     updateNodesAndLinks(0.1);
-    console.log("Links afterwards", links, " len ", links.length);
-    console.log("Nodes afterwards", nodes, " len ", nodes.length);
+    // console.log("Links afterwards", links, " len ", links.length);
+    // console.log("Nodes afterwards", nodes, " len ", nodes.length);
 }
 
 function resetMatrices() {
@@ -790,8 +814,13 @@ var initialZoom = {
 };
 function updateZoom(elapsed) {
     if (initialZoom.done) {
-        initialZoom.from = getTransformFit(svg_node_g);
-        svg.call(zoom.transform, initialZoom.from);
+        var interTransform = d3.interpolateTransformSvg(
+            getCurrentTransform(),
+            getTransformFit(svg_node_g)
+        );
+
+        currTransform = interTransform(d3.easeCubic(0.2));
+        svg.call(zoom.transform, currTransform);
     } else {
         initialZoom.elapsed += elapsed;
         var ratio = Math.min(initialZoom.elapsed / initialZoom.duration, 1);
@@ -822,6 +851,7 @@ var elapsed = 0;
 var totalPackets = 0;
 var targetNodes = 15;
 var buildUpElapsed = 0;
+const maxNumPackets = 1;
 function step(time) {
     // calculate delta time
     if (lastTime != null) {
@@ -842,13 +872,9 @@ function step(time) {
 
     links.forEach((l) => {
         l.value *= 0.9;
-        // const length = l.getLength();
-        // update direct distances (TODO: only upper half for better speed)
-        //dist[l.a.index][l.b.index] = length;
-        //dist[l.b.index][l.a.index] = length;
     });
 
-    if (initialZoom.done && ((nodes.length >= 10 && packets.length < 2) || (nodes.length > 1 && packets.length < 1))) {
+    if (initialZoom.done && ((nodes.length >= 10 && packets.length < maxNumPackets) || (nodes.length > 1 && packets.length < 1))) {
         const initialNode = randNode();
         const targetNode = randNode();
         packets.push(new Packet(initialNode, targetNode));
@@ -863,20 +889,21 @@ function step(time) {
         var x, y;
         // TODO: Prioritize nodes in larger dimension
         // idea: multiply position by width, height and random factor in (0, 1). Then sort sums, choose first element
-        sortedNodes = nodes.map(n => ({ n, sort: Math.abs(n.x / height * Math.random()) + Math.abs(n.y / width * Math.random) })).sort((a, b) => a.sort - b.sort).map(({ n }) => n)
-        /*if (Math.random() <= 0.1) {
-            let zoom_origin_x = initialZoom.from.invertX(0);
-            let zoom_width = initialZoom.from.invertX(width);
-            let zoom_origin_y = initialZoom.from.invertY(0);
-            let zoom_height = initialZoom.from.invertY(height);
-            x = zoom_origin_x - zoom_width / 2 + randRange(0, zoom_width)
-            y = zoom_origin_y - zoom_height / 2 + randRange(0, zoom_height)
-        }
-        else {*/
+        const whr = width / height;
+        sortedNodes = nodes.map(n => ({ n, sort: (Math.abs(n.x) * whr + Math.abs(n.y)) * Math.random() })).sort((a, b) => a.sort - b.sort).map(({ n }) => n)
+        // if (Math.random() <= 0.9) {
+        //     let zoom_origin_x = initialZoom.from.invertX(0);
+        //     let zoom_width = initialZoom.from.invertX(width);
+        //     let zoom_origin_y = initialZoom.from.invertY(0);
+        //     let zoom_height = initialZoom.from.invertY(height);
+        //     x = zoom_origin_x - zoom_width / 2 + randRange(0, zoom_width)
+        //     y = zoom_origin_y - zoom_height / 2 + randRange(0, zoom_height)
+        // }
+        // else {
         let randomNode = sortedNodes[sortedNodes.length - 1]; // randNode();
         x = randomNode.x;
         y = randomNode.y;
-        // }
+        //}
         spawnNode(x, y, 0.3);
 
         if (nodes.length >= targetNodes) {
@@ -890,7 +917,7 @@ function step(time) {
             floydIteration();
         }
     } else if (!floydConnectivityTested) {
-        console.log("Testing connectivity");
+        // console.log("Testing connectivity");
         floydConnectivityTested = true;
         var changes = false;
 
@@ -903,7 +930,7 @@ function step(time) {
             .map(({ value }) => value)
 
 
-        console.log("Iterating over random indices ", randomIndices);
+        // console.log("Iterating over random indices ", randomIndices);
         // for each node (in random order)
         for (let i of randomIndices) {
             for (let j of randomIndices) {
