@@ -9,6 +9,8 @@ title: "About"
 The main purpose of this personal website is to host the animation on the main page.
 It has no particular meaning, I just think it looks pretty.
 
+You can find its [source code on GitHub](https://github.com/jw3il/jw3il.github.io).
+
 ## Acknowledgements
 
 Building this website would not have been possible without the following projects:
