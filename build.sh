@@ -1,2 +1,2 @@
 #!/bin/sh
-hugo
+hugo --minify
