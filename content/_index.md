@@ -1,7 +1,3 @@
 ---
-title: "Home page"
+title: ""
 ---
-
-This line is from `content/_index.md`.
-
-[Go to About](/about/).

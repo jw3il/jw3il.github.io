@@ -6,4 +6,8 @@ $jsd3 = resources.Get "/js/d3/d3.v7.min.js" }} {{ end }}
 {{ $jssim := resources.Get "/js/sim.js" }} {{ if hugo.IsProduction }} {{ $jssim
 = $jssim | js.Build (dict "minify" true) }} {{ end }}
 <script src="{{ $jssim.RelPermalink }}"></script>
+<div id="footer">
+  <a href="https://github.com/jw3il/">jw3il</a> |
+  <a href="/about" style="font-size: smaller">about & privacy</a>
+</div>
 {{ end }}
