@@ -1,2 +1,2 @@
 #!/bin/sh
-hugo --minify
+hugo --minify "$@"

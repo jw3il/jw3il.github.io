@@ -1,2 +1,2 @@
 #!/bin/sh
-hugo serve --noHTTPCache
+hugo serve --noHTTPCache "$@"
