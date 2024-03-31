@@ -24,6 +24,12 @@ $ ./build.sh
 
 The static website will be placed in the `/public` directory.
 
+To debug the production build, you can call
+
+```
+$ HUGO_ENV=production ./debug.sh
+```
+
 ## License
 
 The code in this repository is licensed under the MIT license.
