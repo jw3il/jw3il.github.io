@@ -1,16 +1,9 @@
 {{ define "main" }}
-<div id="chart" style="text-align: center; width: 100%; height: 100%;"></div>
-{{ .Content }}
-<p>This line is from <code>layouts/index.html</code>.</p>
-
-{{ $jsd3 := resources.Get "/js/d3/d3.v7.js" }}
-{{ if hugo.IsProduction }}
-{{ $jsd3 = resources.Get "/js/d3/d3.v7.min.js" }}
-{{ end }}
+<div id="sim"></div>
+{{ $jsd3 := resources.Get "/js/d3/d3.v7.js" }} {{ if hugo.IsProduction }} {{
+$jsd3 = resources.Get "/js/d3/d3.v7.min.js" }} {{ end }}
 <script src="{{ $jsd3.RelPermalink }}"></script>
-{{ $jssim := resources.Get "/js/sim.js" }}
-{{ if hugo.IsProduction }}
-{{ $jssim = $jssim | js.Build (dict "minify" true) }}
-{{ end }}
+{{ $jssim := resources.Get "/js/sim.js" }} {{ if hugo.IsProduction }} {{ $jssim
+= $jssim | js.Build (dict "minify" true) }} {{ end }}
 <script src="{{ $jssim.RelPermalink }}"></script>
 {{ end }}
