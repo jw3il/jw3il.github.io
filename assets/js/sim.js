@@ -399,8 +399,6 @@ class Packet {
       }
       // console.log('Next node is ' + this.nextNode.index);
       this.idle = false;
-    } else {
-      console.log("Deadlock! Node: " + this.index);
     }
   }
 
@@ -672,7 +670,7 @@ function floydAdvanceIndex() {
   if (floyd_k >= numNodes) {
     floyd_k = 0;
     floydDone = true;
-    console.log("Floyd done", adjacency, dist, distNext);
+    // console.log("Floyd done", adjacency, dist, distNext);
   }
 }
 
@@ -956,7 +954,7 @@ function step(time) {
 
     if (nodes.length >= targetNodes) {
       targetNodes = randRange(3, 15);
-      console.log("New target nodes", targetNodes);
+      // console.log("New target nodes", targetNodes);
     }
   }
 
@@ -995,11 +993,9 @@ function step(time) {
     }
 
     if (changes) {
-      console.log("Found isolated nodes");
+      // console.log("Found isolated nodes");
       updateNodesAndLinks(0.1);
       floydConnectivityTested = false;
-    } else {
-      console.log("Could not find isolated nodes");
     }
   }
 
