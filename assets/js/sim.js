@@ -1,6 +1,3 @@
-const width = window.innerWidth;
-const height = window.innerHeight;
-
 var nodes = [];
 var links = [];
 var packets = [];
@@ -74,7 +71,11 @@ const simulation = d3
     d3
       .forceManyBody()
       .distanceMin(15)
-      .distanceMax(Math.sqrt(width * width + height * height))
+      .distanceMax(
+        Math.sqrt(
+          Math.pow(window.screen.width, 2) + Math.pow(window.screen.height, 2)
+        )
+      )
       .strength(-100)
   )
   .force("center", d3.forceCenter(0, 0).strength(0.2));
@@ -485,8 +486,22 @@ var svg = d3
   .select("#sim")
   .append("svg")
   .attr("width", "100%")
-  .attr("height", "100%")
-  .attr("viewBox", [-width / 2, -height / 2, width, height]);
+  .attr("height", "100%");
+
+var viewBoxWidth;
+var viewBoxHeight;
+
+function updateViewBox() {
+  viewBoxWidth = window.innerWidth;
+  viewBoxHeight = window.innerHeight;
+  svg.attr("viewBox", [
+    -viewBoxWidth / 2,
+    -viewBoxHeight / 2,
+    viewBoxWidth,
+    viewBoxHeight,
+  ]);
+}
+updateViewBox();
 
 const zoom = d3.zoom().scaleExtent([0.01, 60]).on("zoom", zoomed);
 
@@ -540,7 +555,10 @@ function getTransformFit(selection) {
   }
 
   // TODO: rotate for optimal fit
-  var scale = Math.min(width / bounds.width, height / bounds.height);
+  var scale = Math.min(
+    viewBoxWidth / bounds.width,
+    viewBoxHeight / bounds.height
+  );
   var center = {
     x: bounds.x + bounds.width / 2,
     y: bounds.y + bounds.height / 2,
@@ -844,7 +862,7 @@ function resetMatrices() {
 var warmUpDone = false;
 var warumUp = setInterval(function () {
   if (nodes.length < 10) {
-    spawnNode(getRandomCoord(width), getRandomCoord(height));
+    spawnNode(getRandomCoord(viewBoxWidth), getRandomCoord(viewBoxHeight));
   } else {
     clearInterval(warumUp);
     warmUpDone = true;
@@ -941,7 +959,7 @@ function step(time) {
 
     // idea: select random node based on its position, prefer nodes that are
     // fruther away from the center, particulary across the bigger screen dimension
-    const whr = width / height;
+    const whr = viewBoxWidth / viewBoxHeight;
     sortedNodes = nodes
       .map((n) => ({
         n,
@@ -1017,3 +1035,7 @@ function step(time) {
 }
 
 window.requestAnimationFrame(step);
+
+addEventListener("resize", () => {
+  updateViewBox();
+});
