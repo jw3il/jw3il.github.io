@@ -1,5 +1,12 @@
 {{ define "main" }}
-<div id="sim"></div>
+<div id="sim">
+  <noscript>
+    <img src="/example.svg" class="scale-center" />
+    <p class="scale-center" style="background-color: rgba(0, 0, 0, 0.42)">
+      This animation requires Javascript.
+    </p>
+  </noscript>
+</div>
 {{ $jsd3 := resources.Get "/js/d3/d3.v7.js" }} {{ if hugo.IsProduction }} {{
 $jsd3 = resources.Get "/js/d3/d3.v7.min.js" }} {{ end }}
 <script src="{{ $jsd3.RelPermalink }}"></script>

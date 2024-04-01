@@ -51,3 +51,14 @@ svg {
     color: inherit;
     text-decoration: underline;
 }
+
+.scale-center {
+    max-width: 100%;
+    max-height: 100vh;
+    margin: auto;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    -ms-transform: translateY(-50%) translateX(-50%);
+    transform: translateY(-50%) translateX(-50%);
+}
